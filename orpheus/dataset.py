@@ -36,16 +36,13 @@ class LyricsDataset(torch.utils.data.Dataset):
 			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
 
 			for i, row in enumerate(csv_reader):
-				print(i)
-				if i >= 10000:
-					break
 				if i == 0 and skip_first_line:
 					continue
 
 				instances.append(Instance(
-									int(labels.index(row[5].lower())),
-									[line.split() for line in row[6].split('\n')]
-								))
+					int(labels.index(row[5].lower())),
+					[line.split() for line in row[6].split('\n')]
+				))
 
 		return LyricsDataset(instances, len(labels), max_lines, max_words_per_line, remove_stop_words)
 
@@ -97,7 +94,6 @@ class Vocab:
 		if pad_lines:
 				encoded.extend([[self.stoi["<PAD>"]] * self.max_words_per_line] * (self.max_lines - j - 1))
 
-		print(encoded)
 		return torch.Tensor(encoded).type(torch.LongTensor)
 
 
