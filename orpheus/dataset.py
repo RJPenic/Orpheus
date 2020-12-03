@@ -6,6 +6,8 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import csv
 
+from nltk.corpus import stopwords
+
 @dataclass
 class Instance:
     label : int
@@ -16,15 +18,18 @@ class Instance:
         self.text = text
 
 class LyricsDataset(torch.utils.data.Dataset):
-    def __init__(self, instances, max_vocab_size = 30000, max_lines = 30, max_words_per_line = 10, remove_stop_words = False):
+    def __init__(self, instances, max_vocab_size = 33000, max_lines = 30, max_words_per_line = 10, remove_stop_words = False):
         self.instances = instances
+        self.stop_words = stopwords.words('english')
+        self.stopwords.update(['you\'re', 'i\'m', 'she\'s', 'he\'s', 'it\'s'])
 
         ct_txt = {}
 
         for instance in instances:
             for line in instance.text:
                 for token in line:
-                    ct_txt[token] = ct_txt.get(token, 0) + 1
+                    if remove_stop_words and token in self.stopwords:
+                        ct_txt[token] = ct_txt.get(token, 0) + 1
 
         self.text_vocab = Vocab(ct_txt, max_lines, max_words_per_line, max_vocab_size)
         
