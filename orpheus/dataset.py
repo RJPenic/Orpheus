@@ -96,6 +96,34 @@ class Vocab:
 
         return torch.Tensor(encoded).type(torch.LongTensor)
 
+def load_vec_file_to_dict(filename):
+    with open(filename) as f:
+        content = f.readlines()
+        
+    content = [x.strip() for x in content]
+    
+    vecs = {}
+    
+    for line in content:
+        elems = line.split()
+        vecs[elems[0]] = torch.Tensor([float(n) for n in elems[1:]])
+        
+    return vecs
+        
+    
+def load_vec_repr(vocab, d = 300, file = None, freeze = False):
+    emb_mat = torch.randn(len(vocab.stoi), d)
+    emb_mat[0] = torch.zeros(d)
+
+    if file is not None:
+        vecs = load_vec_file_to_dict(file)
+        
+        for k in vocab.stoi:
+            if k in vecs:
+                emb_mat[vocab.stoi[k]] = vecs[k]
+
+
+    return nn.Embedding.from_pretrained(emb_mat, padding_idx = 0, freeze = freeze)
 
 # ------ ˇˇˇ IGNORE ˇˇˇ ------
 if __name__ == "__main__":
