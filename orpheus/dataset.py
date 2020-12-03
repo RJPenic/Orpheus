@@ -7,6 +7,7 @@ from torch.nn.utils.rnn import pad_sequence
 import csv
 
 from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
 @dataclass
 class Instance:
@@ -46,7 +47,7 @@ class LyricsDataset(torch.utils.data.Dataset):
 
                 instances.append(Instance(
                     int(labels.index(row[5].lower())),
-                    [line.split() for line in row[6].split('\n')]
+                    [word_tokenize(line) for line in row[6].split('\n')]
                 ))
 
         return LyricsDataset(instances, len(labels), max_lines, max_words_per_line, remove_stop_words)
