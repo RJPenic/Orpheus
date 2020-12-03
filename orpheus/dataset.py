@@ -69,32 +69,23 @@ class Vocab:
             if min_freq <= frequencies[t] or (len(self.stoi) < max_size or max_size <= 0):
                 self.stoi[t] = len(self.stoi)
 
-    def encode(self, instance_lyrics):
+    def encode(self, text):
         encoded = []
-        pad_lines = True
-        for j, line in enumerate(instance_lyrics):
+
+        for j, line in enumerate(text):
             if j >= self.max_lines:
-                pad_lines = False
                 break
 
             temp = []
-            pad_words = True
             for i, token in enumerate(line):
                 if i >= self.max_words_per_line:
-                    pad_words = False
                     break
 
                 temp.append(self.stoi.get(token, self.stoi["<UNK>"]))
-
-            if pad_words:
-                temp.extend([self.stoi["<PAD>"]] * (self.max_words_per_line - i - 1)) # maybe put pad in front ???
             
             encoded.append(temp)
 
-        if pad_lines:
-            encoded.extend([[self.stoi["<PAD>"]] * self.max_words_per_line] * (self.max_lines - j - 1))
-
-        return torch.Tensor(encoded).type(torch.LongTensor)
+        return encoded
 
 def load_vec_file_to_dict(filename):
     with open(filename) as f:
@@ -125,9 +116,41 @@ def load_vec_repr(vocab, d = 300, file = None, freeze = False):
 
     return nn.Embedding.from_pretrained(emb_mat, padding_idx = 0, freeze = freeze)
 
+def pad_collate_fn(batch, pad_index = 0): # ???
+    texts, labels = list(zip(*batch))
+    bsz = len(labels)
+
+    nums_lines = [len(lines) for lines in texts]
+    nums_words = [[len(line) for line in lines] for lines in texts]
+
+    max_lines = max(nums_lines)
+    max_words = max([max(nw) for nw in nums_words])
+
+    texts_tensor = torch.full((bsz, max_lines, max_words), pad_index).long()
+    line_lens_tensor = torch.full((bsz, max_lines), pad_index).long()
+
+    for i, text in enumerate(texts):
+        text_len = nums_lines[i]
+        line_lens_tensor[i, :text_len] = torch.LongTensor(nums_words[i])
+        for j, line in enumerate(text):
+            line_len = nums_words[i][j]
+            texts_tensor[i, j, :line_len] = torch.LongTensor(line)
+
+    return texts_tensor, torch.LongTensor(labels), torch.LongTensor(nums_lines), line_lens_tensor
+
 # ------ ˇˇˇ IGNORE ˇˇˇ ------
 if __name__ == "__main__":
     filepath = '../dataset/lyrics_1.csv'
 
     ds = LyricsDataset.from_file(filepath, ["Rock", "Pop", "Hip-Hop", "Metal", "Country", "Jazz", "Electronic", "R&B", "Indie", "Folk", "Other"])
     print(ds[0])
+
+    train_dataloader = DataLoader(dataset=ds, batch_size=2, 
+                                  shuffle=False, collate_fn=pad_collate_fn)
+
+    for text, labels, len1, len2 in train_dataloader:
+        print(text)
+        print(labels)
+        print(len1)
+        print(len2)
+        break
