@@ -11,7 +11,7 @@ class HAN_Model(nn.Module):
         pass
 
 class GRU_Net(nn.Module):
-	def __init__(self):
+    def __init__(self):
         super().__init__()
         #TODO
 
@@ -20,7 +20,7 @@ class GRU_Net(nn.Module):
         pass
 
 class Attention(nn.Module):
-	def __init__(self):
+    def __init__(self):
         super().__init__()
         #TODO
 
