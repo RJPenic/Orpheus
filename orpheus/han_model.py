@@ -35,7 +35,7 @@ class HAN_Model(nn.Module):
             temp.append(self.word_att(line))
 
         x = torch.cat(temp, 0)
-        x = self.line_att(x.permute(1, 0, 2))
+        x = self.line_att(x)
 
         x = self.final_proj(x)
 
@@ -59,7 +59,7 @@ class Attention(nn.Module):
         alphas = self.relevance_lin(x)
         alphas = F.softmax(alphas, dim = 1)
 
-        x = torch.sum(x * alphas, dim = 1).unsqueeze(0)
+        x = torch.sum(x * alphas, dim = 1).unsqueeze(1)
         x = self.dropout(x)
 
         return x
