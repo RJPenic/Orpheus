@@ -34,7 +34,7 @@ class HAN_Model(nn.Module):
         for line in x:
             temp.append(self.word_att(line))
 
-        x = torch.cat(temp, 0)
+        x = torch.cat(temp, 1)
         x = self.line_att(x)
 
         x = self.final_proj(x)
