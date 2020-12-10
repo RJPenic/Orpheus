@@ -10,6 +10,8 @@ from dataset import LyricsDataset, pad_collate_fn
 from han_model import HAN_Model
 from argparse import ArgumentParser
 
+from pytorch_lightning.metrics import F1
+
 
 class Orpheus(pl.LightningModule):
     def __init__(self, args, dataset, model: nn.Module = None):
@@ -22,6 +24,10 @@ class Orpheus(pl.LightningModule):
         self.val_accuracy = pl.metrics.Accuracy()
         self.test_accuracy = pl.metrics.Accuracy()
 
+        self.train_f1 = F1(args.num_classes)
+        self.val_f1 = F1(args.num_classes)
+        self.test_f1 = F1(args.num_classes)
+
     # load/download and prepare data, called only once
     def prepare_data(self):
         if self.args.dataset is None:
@@ -31,19 +37,19 @@ class Orpheus(pl.LightningModule):
 
     # split into training and validation dataset
     def setup(self, stage: str):
-        n_train = int(len(dataset) * 0.7)
-        n_val = int(len(dataset) * 0.05)
+        n_train = int(len(dataset) * 0.8)
+        n_val = int(len(dataset) * 0.1)
         n_test = len(dataset) - n_val - n_train
         self.train_dataset, self.val_dataset, self.test_dataset = torch.utils.data.random_split(self.dataset, [n_train, n_val, n_test])
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, shuffle = True, batch_size=args.batch, num_workers=args.num_workers, pin_memory=True, collate_fn=pad_collate_fn)
+        return DataLoader(self.train_dataset, shuffle = True, batch_size=args.batch, pin_memory=True, collate_fn=pad_collate_fn)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, shuffle = False, batch_size=args.batch, num_workers=args.num_workers, pin_memory=True, collate_fn=pad_collate_fn)
+        return DataLoader(self.val_dataset, shuffle = False, batch_size=args.batch, pin_memory=True, collate_fn=pad_collate_fn)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, shuffle = False, batch_size=args.batch, num_workers=args.num_workers, pin_memory=True, collate_fn=pad_collate_fn)
+        return DataLoader(self.test_dataset, shuffle = False, batch_size=args.batch, pin_memory=True, collate_fn=pad_collate_fn)
 
     def training_step(self, batch, batch_idx):
         x, targets = batch
@@ -53,6 +59,7 @@ class Orpheus(pl.LightningModule):
         self.log('train_loss', loss)
 
         self.log('train_acc', self.train_accuracy(x, targets))
+        self.log('train_f1', self.train_f1(x, targets))
 
         return loss
 
@@ -64,11 +71,9 @@ class Orpheus(pl.LightningModule):
         self.log('val_loss', loss)
 
         self.log('val_acc', self.val_accuracy(x, targets))
+        self.log('val_f1', self.val_f1(x, targets))
 
         return loss
-
-    def validation_epoch_end(self, outs):
-    	self.log('val_acc_epoch', self.val_accuracy.compute())
 
     def test_step(self, batch, batch_idx):
         x, targets = batch
@@ -78,11 +83,12 @@ class Orpheus(pl.LightningModule):
         self.log('test_loss', loss)
 
         self.log('test_acc', self.test_accuracy(x, targets))
+        self.log('test_f1', self.test_f1(x, targets))
 
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=args.lr)
         return optimizer
 
     @staticmethod
@@ -93,7 +99,7 @@ class Orpheus(pl.LightningModule):
                         help = "Size of a single batch")
         parser.add_argument('--dataset', type=str,
                     	help = "Path to file containing dataset")
-        parser.add_argument('--lr', type=int, default = 1e-3,
+        parser.add_argument('--lr', type=float, default = 3e-4,
                         help = "Learning rate")
         parser.add_argument('--num_workers', type=int, default=4,
                         help="How many subprocesses to use for data loading")
@@ -125,7 +131,7 @@ if __name__ == "__main__":
                                         num_classes = args.num_classes))
 
     trainer = pl.Trainer(fast_dev_run = args.fast_dev_run, benchmark = args.benchmark,
-                        gpus = args.gpus, max_epochs = args.max_epochs)
+                        gpus = args.gpus, max_epochs = args.max_epochs, gradient_clip_val=1.0)
     trainer.fit(model)
     result = trainer.test()
     print(result)
