@@ -7,9 +7,9 @@ from torch.nn.utils.rnn import pad_sequence
 import csv
 
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
+import random
 
-import han_model
+from tqdm import tqdm
 
 @dataclass
 class Instance:
@@ -26,36 +26,61 @@ class LyricsDataset(torch.utils.data.Dataset):
         self.stop_words = set(stopwords.words('english'))
         self.stop_words.update(['you\'re', 'i\'m', 'she\'s', 'he\'s', 'it\'s', '\'re', '\'m', '\'s'])
 
+        self.max_vocab_size = max_vocab_size
+        self.max_lines = max_lines
+        self.max_words_per_line = max_words_per_line
+        self.remove_stop_words = remove_stop_words
+
+        self.text_vocab = self.construct_vocab(instances)
+
+    def get_subset_vocab(self, indices):
+        return self.construct_vocab([self.instances[i] for i in indices])
+
+    def construct_vocab(self, instances):
         ct_txt = {}
 
         for instance in instances:
             for line in instance.text:
                 for token in line:
-                    if not (remove_stop_words and token in self.stop_words):
+                    if not (self.remove_stop_words and token in self.stop_words):
                         ct_txt[token] = ct_txt.get(token, 0) + 1
 
-        self.text_vocab = Vocab(ct_txt, max_lines, max_words_per_line, max_size = max_vocab_size)
-        
-    def from_file(filename, max_lines = 30, max_words_per_line = 10, skip_first_line = True, remove_stop_words = False, max_vocab_size = 30000):
+        return Vocab(ct_txt, self.max_lines, self.max_words_per_line, max_size = self.max_vocab_size)
+
+    @staticmethod
+    def from_file(filename, labels, take_rates = None, max_lines = 30, max_words_per_line = 10, skip_first_line = True, remove_stop_words = True, max_vocab_size = 30000):
         instances = []
-        labels = []
+
+        if take_rates is None:
+            take_rates = [1.0] * len(labels)
 
         with open(filename) as csvfile:
             csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
 
-            for i, row in enumerate(csv_reader):
-                print(i)
+            print("Loading dataset...")
+            for i, row in tqdm(enumerate(csv_reader)):
                 if i == 0 and skip_first_line:
                     continue
 
                 label = row[5].lower()
+
                 if label not in labels:
-                    labels.append(label)
+                    continue
+
+                if take_rates[labels.index(label)] < random.random():
+                    continue
 
                 instances.append(Instance(
                     int(labels.index(label)),
                     [line.split() for line in row[6].split('\n')[:max_lines]]
                 ))
+
+        print(f'Number of instances : {len(instances)}')
+
+        print("-- Labels --")
+        for i, l in enumerate(labels):
+            print(f'{i} : {l}')
+        print("------------")
 
         return LyricsDataset(instances, max_vocab_size, max_lines, max_words_per_line, remove_stop_words)
 
@@ -101,14 +126,15 @@ class Vocab:
         return encoded
 
 def load_vec_file_to_dict(filename):
-    with open(filename) as f:
+    with open(filename, encoding="utf8") as f:
         content = f.readlines()
         
     content = [x.strip() for x in content]
     
     vecs = {}
 
-    for line in content:
+    print("Loading word vector representation...")
+    for line in tqdm(content):
         elems = line.split()
         vecs[elems[0]] = torch.Tensor([float(n) for n in elems[1:]])
         
@@ -129,7 +155,7 @@ def load_vec_repr(vocab, d = 300, file = None, freeze = False):
 
     return nn.Embedding.from_pretrained(emb_mat, padding_idx = 0, freeze = freeze)
 
-def pad_collate_fn(batch, pad_index = 0): # ???
+def pad_collate_fn(batch, pad_index = 0):
     texts, labels = list(zip(*batch))
     bsz = len(labels)
 
@@ -150,20 +176,3 @@ def pad_collate_fn(batch, pad_index = 0): # ???
             texts_tensor[i, j, :line_len] = torch.LongTensor(line)
 
     return texts_tensor, torch.LongTensor(labels)
-
-# ------ ˇˇˇ IGNORE ˇˇˇ ------
-if __name__ == "__main__":
-    filepath = '../dataset/lyrics_1.csv'
-
-    ds = LyricsDataset.from_file(filepath)
-    train_dataloader = DataLoader(dataset=ds, batch_size=4, 
-                                  shuffle=False, collate_fn=pad_collate_fn, num_workers = 4)
-
-    model = han_model.HAN_Model(ds.text_vocab)
-
-    for text, labels in train_dataloader:
-        print(text)
-        print(text.shape)
-        print(labels)
-        model(text)
-        break
